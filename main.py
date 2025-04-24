@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 from miditok import REMI, TokenizerConfig
 from miditok.pytorch_data import DatasetMIDI, DataCollator
 
+import itertools
+
 from src.models.gpt import GPT
 from src.train.train import Trainer
 from src.utils.general_utils import set_seed, setup_logging, save_train_log, CfgNode as CN
@@ -140,51 +142,129 @@ if __name__ == '__main__':
         save_train_log(out_dir, n_examples, train_loss)
 
     # sample
+    # if config.pipeline.sample:
+    #
+    #     sampled_tokens = model.sample(size=config.sample.n_scratch, max_new_tokens=config.model.block_size,
+    #                                   device=None, verbose=True, bos_token_id=1, pad_token_id=0)
+    #
+    #     for i in range(config.sample.n_scratch):
+    #         outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
+    #         tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+    #
+    #     seed_sequences = []
+    #     train_samples = []
+    #
+    #     set_seed(None)
+    #
+    #     for batch_idx, encodings in enumerate(dataloader):
+    #
+    #         if batch_idx >= config.sample.n_seed:
+    #             break
+    #
+    #         input_ids = encodings["input_ids"]  # shape (B, T)
+    #
+    #         # Pick a random sequence from the batch
+    #         random_idx = np.random.randint(0, input_ids.size(0))
+    #
+    #         # Get the tokens for that sequence as a list
+    #         seed_sequence = input_ids[random_idx].tolist()
+    #         seed_sequence = seed_sequence[:config.sample.seed_toks]
+    #
+    #         train_samples.append(input_ids[random_idx])
+    #         seed_sequences.append(seed_sequence)
+    #
+    #
+    #     # Feed partial sequences as a prompts to the model
+    #     generated_sequences = model.sample(start_tokens=seed_sequences, size=config.sample.n_seed,
+    #                              temperature=1.0, max_new_tokens=config.model.block_size-config.sample.seed_toks, device=None)
+    #
+    #
+    #     # Save seeded samples
+    #     for i in range(config.sample.n_seed):
+    #
+    #         outmidi = os.path.join(out_dir, f"train_sample{i+1}.mid")
+    #         tokenizer(input_ids[random_idx]).dump_midi(outmidi)
+    #
+    #         outmidi = os.path.join(out_dir, f"continued_sample{i+1}.mid")
+    #         tokenizer(generated_sequences[i]).dump_midi(outmidi)
+
     if config.pipeline.sample:
 
-        sampled_tokens = model.sample(size=config.sample.n_scratch, max_new_tokens=config.model.block_size, 
-                                      device=None, verbose=True, bos_token_id=1, pad_token_id=0)
-        
-        for i in range(config.sample.n_scratch):
-            outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
-            tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+        # ---- convenience helpers ----
+        pad_id = tokenizer['PAD_None']
+        bos_id = tokenizer['BOS_None']
+        eos_id = tokenizer['EOS_None']
 
-        seed_sequences = []
-        train_samples = []
 
-        set_seed(None)
+        def save_midi(tok, fp):
+            """tok -> cpu -> midi file on disk"""
+            tok = tok.detach().cpu()  # just in case
+            tokenizer(tok).dump_midi(fp)
+
+
+        # ---------- scratch generation ----------
+        model.eval()  # no dropout during generation
+        with torch.no_grad():
+            scratch_tokens = model.sample(
+                size=config.sample.n_scratch,
+                max_new_tokens=config.model.block_size,
+                bos_token_id=bos_id,
+                pad_token_id=pad_id,
+                temperature=1.0,
+            )
+
+        # sanity print
+              scratch_tokens[0][:30].tolist())
+        print("[SANITY] Decoded:\n",
+              tokenizer.decode(scratch_tokens[0][1:21], skip_special_tokens=False))
+        print("-" * 40)
+
+        for i, seq in enumerate(scratch_tokens):
+            save_midi(seq, os.path.join(out_dir, f"scratch{i + 1}.mid"))
+
+        # ---------- pick random training seeds ----------
+        seed_sequences, train_samples = [], []
+        set_seed(None)  # true randomness
 
         for batch_idx, encodings in enumerate(dataloader):
-
-            if batch_idx >= config.sample.n_seed:
+            if len(seed_sequences) >= config.sample.n_seed:
                 break
+            ids = encodings["input_ids"]
+            rnd = np.random.randint(0, ids.size(0))
+            whole = ids[rnd]
+            seed = whole[:config.sample.seed_toks]
+            train_samples.append(whole)
+            seed_sequences.append(seed.tolist())
 
-            input_ids = encodings["input_ids"]  # shape (B, T)
-            
-            # Pick a random sequence from the batch
-            random_idx = np.random.randint(0, input_ids.size(0))
-            
-            # Get the tokens for that sequence as a list
-            seed_sequence = input_ids[random_idx].tolist()
-            seed_sequence = seed_sequence[:config.sample.seed_toks]
+        # ---------- continuation ----------
+        with torch.no_grad():
+            continued = model.sample(
+                start_tokens=seed_sequences,
+                size=len(seed_sequences),  # one per seed
+                max_new_tokens=config.model.block_size -
+                               config.sample.seed_toks,
+                bos_token_id=bos_id,
+                pad_token_id=pad_id,
+                temperature=1.0,
+            )
 
-            train_samples.append(input_ids[random_idx])
-            seed_sequences.append(seed_sequence)
-            
-            
-        # Feed partial sequences as a prompts to the model
-        generated_sequences = model.sample(start_tokens=seed_sequences, size=config.sample.n_seed,            
-                                 temperature=1.0, max_new_tokens=config.model.block_size-config.sample.seed_toks, device=None)
+        # sanity print
+        print("\n[SANITY] Seed (first 15 ids):\n", seed_sequences[0][:15])
+        print("[SANITY] Continuation (next 15 ids):\n",
+              continued[0][len(seed_sequences[0]):len(seed_sequences[0]) + 15].tolist())
+        print("[SANITY] Decoded continuation fragment:\n",
+              tokenizer.decode(
+                  continued[0][len(seed_sequences[0]) + 1:
+                               len(seed_sequences[0]) + 20],
+                  skip_special_tokens=False))
+        print("-" * 40)
 
-      
-        # Save seeded samples 
-        for i in range(config.sample.n_seed):
+        # ---------- save ----------
+        for i in range(len(seed_sequences)):
+            save_midi(train_samples[i], os.path.join(out_dir, f"train_sample{i + 1}.mid"))
+            save_midi(continued[i], os.path.join(out_dir, f"continued_sample{i + 1}.mid"))
 
-            outmidi = os.path.join(out_dir, f"train_sample{i+1}.mid")
-            tokenizer(input_ids[random_idx]).dump_midi(outmidi)
-
-            outmidi = os.path.join(out_dir, f"continued_sample{i+1}.mid")
-            tokenizer(generated_sequences[i]).dump_midi(outmidi)
+        model.train()  # switch back
 
 
     # evaluate
