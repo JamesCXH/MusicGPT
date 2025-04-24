@@ -249,46 +249,46 @@ if __name__ == '__main__':
             save_midi(seq, os.path.join(out_dir, f"scratch{i + 1}.mid"))
 
         # ---------- CONTINUATIONS ---------------------------------------------
-        seed_sequences, train_samples = [], []
-        set_seed(None)  # random seeds
-
-        for batch in dataloader:
-            if len(seed_sequences) >= config.sample.n_seed:
-                break
-            ids_batch = batch["input_ids"]
-            rnd = np.random.randint(0, ids_batch.size(0))
-            whole = ids_batch[rnd]  # tensor
-            seed = whole[:config.sample.seed_toks]  # truncate
-            train_samples.append(whole)
-            seed_sequences.append(seed.tolist())
-
-        with torch.no_grad():
-            continued_full = model.sample(
-                start_tokens=seed_sequences,
-                size=len(seed_sequences),
-                max_new_tokens=config.model.block_size - config.sample.seed_toks,
-                bos_token_id=bos_id,
-                pad_token_id=pad_id,
-                temperature=0.9,
-            )
+        # seed_sequences, train_samples = [], []
+        # set_seed(None)  # random seeds
+        #
+        # for batch in dataloader:
+        #     if len(seed_sequences) >= config.sample.n_seed:
+        #         break
+        #     ids_batch = batch["input_ids"]
+        #     rnd = np.random.randint(0, ids_batch.size(0))
+        #     whole = ids_batch[rnd]  # tensor
+        #     seed = whole[:config.sample.seed_toks]  # truncate
+        #     train_samples.append(whole)
+        #     seed_sequences.append(seed.tolist())
+        #
+        # with torch.no_grad():
+        #     continued_full = model.sample(
+        #         start_tokens=seed_sequences,
+        #         size=len(seed_sequences),
+        #         max_new_tokens=config.model.block_size - config.sample.seed_toks,
+        #         bos_token_id=bos_id,
+        #         pad_token_id=pad_id,
+        #         temperature=0.9,
+        #     )
 
         # ---------- PRINT & SAVE ----------------------------------------------
-        for i in range(len(seed_sequences)):
-            # (1) seed only
-            seed_ids = train_samples[i]
-            print(f"[TRAIN {i + 1}] first 100 ids ->\n{first_100(seed_ids)}\n")
-            save_midi(seed_ids,
-                      os.path.join(out_dir, f"train_sample{i + 1}.mid"))
-
-            # (2) seed + generated continuation
-            seed_len = len(seed_sequences[i])
-            merged = torch.cat([seed_ids,
-                                continued_full[i][seed_len:]])
-            print(f"[CONT  {i + 1}] first 100 ids ->\n{first_100(merged)}\n")
-            save_midi(merged,
-                      os.path.join(out_dir, f"continued_sample{i + 1}.mid"))
-
-        model.train()  # back to training
+        # for i in range(len(seed_sequences)):
+        #     # (1) seed only
+        #     seed_ids = train_samples[i]
+        #     print(f"[TRAIN {i + 1}] first 100 ids ->\n{first_100(seed_ids)}\n")
+        #     save_midi(seed_ids,
+        #               os.path.join(out_dir, f"train_sample{i + 1}.mid"))
+        #
+        #     # (2) seed + generated continuation
+        #     seed_len = len(seed_sequences[i])
+        #     merged = torch.cat([seed_ids,
+        #                         continued_full[i][seed_len:]])
+        #     print(f"[CONT  {i + 1}] first 100 ids ->\n{first_100(merged)}\n")
+        #     save_midi(merged,
+        #               os.path.join(out_dir, f"continued_sample{i + 1}.mid"))
+        #
+        # model.train()  # back to training
     # --------------------------- end pipeline.sample -----------------------------
 
     # evaluate
