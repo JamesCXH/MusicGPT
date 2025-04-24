@@ -189,79 +189,93 @@ if __name__ == '__main__':
     #         tokenizer(generated_sequences[i]).dump_midi(outmidi)
 
     # -------------------------------------------------------------------------
-    #  SAMPLE -- generates scratch sequences *and* continuations of real data
+    #  SAMPLE -- scratch generation + continuations
     # -------------------------------------------------------------------------
     if config.pipeline.sample:
 
-        # ------------------------------------------------------------------
-        # special-token ids straight from the tokenizer
-        # (never hard-code these numbers!)
-        # ------------------------------------------------------------------
-        pad_id = tokenizer['PAD_None']
-        bos_id = tokenizer['BOS_None']
-        eos_id = tokenizer['EOS_None']
-        print(f"PAD ID {pad_id}")
-        print(f"BOS ID {bos_id}")
-        print(f"EOS ID {eos_id}")
+        # --------------------------------------------------
+        #  special-token ids (never hard-code numbers!)
+        # --------------------------------------------------
+        pad_id = tokenizer["PAD_None"]
+        bos_id = tokenizer["BOS_None"]
+        eos_id = tokenizer["EOS_None"]
+
+        bar_id = tokenizer["Bar_None"]
+        pos1_id = tokenizer["Position_1"]
+        prog0_id = tokenizer["Program_0"]
 
 
-        # ------------------------------------------------------------------
-        # helpers
-        # ------------------------------------------------------------------
-        def save_midi(tok_tensor, fp):
-            """Dump a tensor of ids to a .mid file."""
-            tokenizer(tok_tensor.detach().cpu()).dump_midi(fp)
+        # --------------------------------------------------
+        #  helpers
+        # --------------------------------------------------
+        def save_midi(ids_tensor, fp):
+            tokenizer(ids_tensor.detach().cpu()).dump_midi(fp)
 
 
-        def first_n_tokens(id_tensor, n=20):
-            """
-            Return the first n ids plus their readable token strings.
-            Builds a reverse vocab dict only once.
-            """
-            if not hasattr(first_n_tokens, "_rev_vocab"):
-                first_n_tokens._rev_vocab = {v: k for k, v in tokenizer.vocab.items()}
-            ids = id_tensor[:n].tolist()
-            toks = [first_n_tokens._rev_vocab.get(i, f"<unk:{i}>") for i in ids]
+        def first_n_tokens(ids_tensor, n=20):
+            if not hasattr(first_n_tokens, "_rev"):
+                first_n_tokens._rev = {v: k for k, v in tokenizer.vocab.items()}
+            ids = ids_tensor[:n].tolist()
+            toks = [first_n_tokens._rev.get(i, f"<unk:{i}>") for i in ids]
             return ids, toks
 
 
-        # ------------------------------------------------------------------
-        # SCRATCH (from-nothing) GENERATION
-        # ------------------------------------------------------------------
-        model.eval()  # disable dropout/LN noise
-        with torch.no_grad():
-            scratch_tokens = model.sample(
-                size=config.sample.n_scratch,
-                max_new_tokens=config.model.block_size,
-                bos_token_id=bos_id,
-                pad_token_id=pad_id,
-                temperature=1.0,
-            )
+        # --------------------------------------------------
+        #  PRIMER for scratch generation
+        #  (BOS  Bar  Position_1  Program_0)
+        # --------------------------------------------------
+        primer = [bos_id, bar_id, pos1_id, prog0_id]
 
-        # quick sanity check
-        ids, toks = first_n_tokens(scratch_tokens[0], n=30)
+        # --------------------------------------------------
+        #  SCRATCH GENERATION  (with validity retry loop)
+        # --------------------------------------------------
+        model.eval()
+        scratch_tokens = []
+
+        for _ in range(config.sample.n_scratch):
+            for attempt in range(5):  # up to 5 tries
+                with torch.no_grad():
+                    seq = model.sample(
+                        start_tokens=primer,
+                        size=1,
+                        max_new_tokens=config.model.block_size - len(primer),
+                        bos_token_id=bos_id,
+                        pad_token_id=pad_id,
+                        temperature=0.9,  # a bit cooler
+                    )[0]
+                # err_ratio = tokenizer.tokens_errors(seq.tolist())
+                # if err_ratio <= 0.05:  # accept sequence
+                #     scratch_tokens.append(seq)
+                #     break
+            else:
+                scratch_tokens.append(seq)  # take last try
+
+        # ---- sanity print
+        ids, toks = first_n_tokens(scratch_tokens[0], 40)
         print("\n[SANITY] scratch ids :", ids)
         print("[SANITY] scratch toks:", toks)
+        print("[ERR]   {:.1f}% badly-typed tokens".format(
+            tokenizer.tokens_errors(scratch_tokens[0].tolist()) * 100))
         print("-" * 60)
 
-        # save scratch midis
+        # ---- save scratch midis
         for i, seq in enumerate(scratch_tokens):
             save_midi(seq, os.path.join(out_dir, f"scratch{i + 1}.mid"))
 
-        # ------------------------------------------------------------------
-        # SEED REAL TRAINING SEQUENCES & GENERATE CONTINUATIONS
-        # ------------------------------------------------------------------
+        # --------------------------------------------------
+        #  CONTINUATIONS OF REAL TRAIN DATA
+        # --------------------------------------------------
         seed_sequences, train_samples = [], []
-        set_seed(None)  # true randomness for seed pick
+        set_seed(None)  # randomise seed pick
 
         for batch in dataloader:
             if len(seed_sequences) >= config.sample.n_seed:
                 break
             ids_batch = batch["input_ids"]
             rnd = np.random.randint(0, ids_batch.size(0))
-            full_seq = ids_batch[rnd]
-            seed = full_seq[:config.sample.seed_toks]
-            train_samples.append(full_seq)
+            full = ids_batch[rnd]
+            seed = full[:config.sample.seed_toks]
+            train_samples.append(full)
             seed_sequences.append(seed.tolist())
 
         with torch.no_grad():
@@ -271,26 +285,30 @@ if __name__ == '__main__':
                 max_new_tokens=config.model.block_size - config.sample.seed_toks,
                 bos_token_id=bos_id,
                 pad_token_id=pad_id,
-                temperature=1.0,
+                temperature=0.9,
             )
 
-        # sanity print for first pair
-        seed_ids, seed_toks = first_n_tokens(torch.tensor(seed_sequences[0]), n=15)
-        cont_ids, cont_toks = first_n_tokens(continued[0][len(seed_sequences[0]):], n=15)
-        print("\n--- SEED (first 15) ------------------------")
-        print(seed_ids)
-        print(seed_toks)
-        print("--- CONTINUATION (next 15) -----------------")
-        print(cont_ids)
-        print(cont_toks)
+        # ---- sanity print first pair
+        s_ids, s_toks = first_n_tokens(torch.tensor(seed_sequences[0]), 15)
+        c_ids, c_toks = first_n_tokens(
+            continued[0][len(seed_sequences[0]):], 15)
+
+        print("\n--- SEED ----------------------------------")
+        print(s_ids)
+        print(s_toks)
+        print("--- CONTINUATION ---------------------------")
+        print(c_ids)
+        print(c_toks)
         print("-" * 60)
 
-        # save seeds and continuations
+        # ---- save seeds and continuations
         for i in range(len(seed_sequences)):
-            save_midi(train_samples[i], os.path.join(out_dir, f"train_sample{i + 1}.mid"))
-            save_midi(continued[i], os.path.join(out_dir, f"continued_sample{i + 1}.mid"))
+            save_midi(train_samples[i],
+                      os.path.join(out_dir, f"train_sample{i + 1}.mid"))
+            save_midi(continued[i],
+                      os.path.join(out_dir, f"continued_sample{i + 1}.mid"))
 
-        model.train()  # back to training mode
+        model.train()  # back to training
     # --------------------------- end pipeline.sample -----------------------------
 
     # evaluate
