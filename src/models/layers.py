@@ -134,7 +134,7 @@ class MultiHeadAttention(nn.Module):
 
         if mask is not None:
             assert mask.dim() == 4 \
-                   and mask.shape[0] == 1 \
+                   and mask.shape[0] == B \
                    and mask.shape[1] == 1 \
                    and mask.shape[2] == T \
                    and mask.shape[3] == T, \
