@@ -124,10 +124,10 @@ if __name__ == '__main__':
             
             ckpt_path = os.path.join(out_dir, f'{config.model.name}.pt')
 
-            if (trainer.n_iter + 1) % 200 == 0:
+            if (trainer.n_iter + 1) % 1000 == 0:
                 model.eval()
                 torch.save(model.state_dict(), ckpt_path)
-                print("SAVING A MODEL!")
+                print("SAVING A MODEL! (every 1000)")
             
                 # revert model to training mode
                 model.train()
