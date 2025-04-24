@@ -189,42 +189,51 @@ if __name__ == '__main__':
     #         tokenizer(generated_sequences[i]).dump_midi(outmidi)
 
     # -------------------------------------------------------------------------
-    #  SAMPLE – scratch generation + continuations
+    #  SAMPLE – scratch + continuation
     # -------------------------------------------------------------------------
     if config.pipeline.sample:
 
-        # --------------------------------------------------
-        #  SPECIAL-TOKEN IDS  (never hard-code numbers!)
-        # --------------------------------------------------
+        # ---------- special-token ids (never hard-code numbers) --------------
         pad_id = tokenizer["PAD_None"]
         bos_id = tokenizer["BOS_None"]
         eos_id = tokenizer["EOS_None"]
+        bar_id = tokenizer["Bar_None"]
+        pos1_id = tokenizer["Position_1"]
+        prog0_id = tokenizer["Program_0"]
+        # The three musical tokens might be missing in tiny vocabs → filter.
+        primer_optional = [
+            ("Pitch_60", None),
+            ("Velocity_63", None),
+            ("Duration_0.1.8", None),
+        ]
+        for i, (tok, _) in enumerate(primer_optional):
+            try:
+                primer_optional[i] = (tok, tokenizer[tok])
+            except KeyError:
+                primer_optional[i] = None  # drop if absent
+        primer = [bos_id, bar_id, pos1_id, prog0_id] + \
+                 [tid for tup in primer_optional if tup for _, tid in [tup]]
 
-        bar_id = tokenizer["Bar_None"]  # start of bar token
-        pos1_id = tokenizer["Position_1"]  # first position in a bar
-        prog0_id = tokenizer["Program_0"]  # General-MIDI piano
 
-
-        # --------------------------------------------------
-        #  HELPERS
-        # --------------------------------------------------
-        def save_midi(ids_tensor, path):
-            tokenizer(ids_tensor.detach().cpu()).dump_midi(path)
+        # ---------- helpers ---------------------------------------------------
+        def save_midi(ids_tensor, path, retries=3):
+            for _ in range(retries):
+                try:
+                    tokenizer(ids_tensor.cpu()).dump_midi(path)
+                    return
+                except Exception as e:
+                    # regenerate if decode failed (rare)
+                    pass
+            print(f"[WARN] could not save {path} after {retries} tries")
 
 
         def first_100(ids_tensor):
             return ids_tensor[:100].tolist()
 
 
-        # --------------------------------------------------
-        #  PRIMER (makes a valid opening bar)
-        # --------------------------------------------------
-        primer = [bos_id, bar_id, pos1_id, prog0_id]
-
-        # --------------------------------------------------
-        #  SCRATCH GENERATION
-        # --------------------------------------------------
+        # ---------- SCRATCH ----------------------------------------------------
         model.eval()
+        scratch_tokens = []
         with torch.no_grad():
             scratch_tokens = model.sample(
                 start_tokens=primer,
@@ -232,32 +241,29 @@ if __name__ == '__main__':
                 max_new_tokens=config.model.block_size - len(primer),
                 bos_token_id=bos_id,
                 pad_token_id=pad_id,
-                temperature=0.9,  # a bit safer than 1.0
+                temperature=0.9,
             )
 
-        # ---- PRINT & SAVE
         for i, seq in enumerate(scratch_tokens):
             print(f"[SCRATCH {i + 1}] first 100 ids ->\n{first_100(seq)}\n")
             save_midi(seq, os.path.join(out_dir, f"scratch{i + 1}.mid"))
 
-        # --------------------------------------------------
-        #  CONTINUATIONS OF TRAIN SEQUENCES
-        # --------------------------------------------------
+        # ---------- CONTINUATIONS ---------------------------------------------
         seed_sequences, train_samples = [], []
-        set_seed(None)  # pick truly random seeds
+        set_seed(None)  # random seeds
 
         for batch in dataloader:
             if len(seed_sequences) >= config.sample.n_seed:
                 break
             ids_batch = batch["input_ids"]
             rnd = np.random.randint(0, ids_batch.size(0))
-            full_seq = ids_batch[rnd]
-            seed = full_seq[:config.sample.seed_toks]
-            train_samples.append(full_seq)
+            whole = ids_batch[rnd]  # tensor
+            seed = whole[:config.sample.seed_toks]  # truncate
+            train_samples.append(whole)
             seed_sequences.append(seed.tolist())
 
         with torch.no_grad():
-            continued = model.sample(
+            continued_full = model.sample(
                 start_tokens=seed_sequences,
                 size=len(seed_sequences),
                 max_new_tokens=config.model.block_size - config.sample.seed_toks,
@@ -266,19 +272,23 @@ if __name__ == '__main__':
                 temperature=0.9,
             )
 
-        # ---- PRINT & SAVE
+        # ---------- PRINT & SAVE ----------------------------------------------
         for i in range(len(seed_sequences)):
-            print(f"[TRAIN {i + 1}]   first 100 ids ->\n"
-                  f"{first_100(train_samples[i])}\n")
-            print(f"[CONT  {i + 1}]   first 100 ids ->\n"
-                  f"{first_100(continued[i])}\n")
-
-            save_midi(train_samples[i],
+            # (1) seed only
+            seed_ids = train_samples[i]
+            print(f"[TRAIN {i + 1}] first 100 ids ->\n{first_100(seed_ids)}\n")
+            save_midi(seed_ids,
                       os.path.join(out_dir, f"train_sample{i + 1}.mid"))
-            save_midi(continued[i],
+
+            # (2) seed + generated continuation
+            seed_len = len(seed_sequences[i])
+            merged = torch.cat([seed_ids,
+                                continued_full[i][seed_len:]])
+            print(f"[CONT  {i + 1}] first 100 ids ->\n{first_100(merged)}\n")
+            save_midi(merged,
                       os.path.join(out_dir, f"continued_sample{i + 1}.mid"))
 
-        model.train()  # back to training mode
+        model.train()  # back to training
     # --------------------------- end pipeline.sample -----------------------------
 
     # evaluate
