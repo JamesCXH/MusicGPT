@@ -5,6 +5,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from collections import defaultdict
 from ..utils.general_utils import CfgNode as CN
+from torch.cuda.amp import autocast, GradScaler
 
 
 class Trainer():
@@ -37,7 +38,7 @@ class Trainer():
         self.dataloader = dataloader
         self.model = model
         self.optimizer = model.configure_optimizers(config)
-        
+
         # Initialize the learning rate scheduler if enabled
         if config.use_lr_scheduler:
             self.scheduler = ReduceLROnPlateau(
@@ -59,6 +60,7 @@ class Trainer():
         else:
             self.device = config.device
         self.model = self.model.to(self.device)
+        self.scaler = GradScaler(enabled=self.device.startswith('cuda'))
         print("Train", self.device)
 
         self.n_examples = 0
@@ -92,11 +94,21 @@ class Trainer():
                 for k, v in encodings.items():
                     encodings[k] = v.to(self.device)
                 
-                self.loss, logits, *_ = self.model(**encodings) 
+                # self.loss, logits, *_ = self.model(**encodings)
+                with autocast(enabled=self.device.startswith('cuda')):
+                    self.loss, logits, *_ = self.model(**encodings)
+
                 model.zero_grad(set_to_none=True)
-                self.loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                self.optimizer.step()
+                # self.loss.backward()
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # self.optimizer.step()
+                self.scaler.scale(self.loss).backward()
+                self.scaler.unscale_(self.optimizer)  # because we need unscaled for grad clip
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(),
+                                               config.grad_norm_clip)
+
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 
                 self.n_examples += self.dataloader.batch_size
 
