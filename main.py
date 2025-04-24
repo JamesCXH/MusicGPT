@@ -217,12 +217,17 @@ if __name__ == '__main__':
 
         # ---------- helpers ---------------------------------------------------
         def save_midi(ids_tensor, path, retries=3):
+            # 1) move to CPU and convert to a plain Python list of ints
+            ids = ids_tensor.cpu().tolist()
+            # 2) optionally truncate at EOS so trailing PADs aren’t rendered
+            if eos_id in ids:
+                ids = ids[: ids.index(eos_id) + 1]
+            # 3) actually call the tokenizer on a list, not a Tensor
             for _ in range(retries):
                 try:
-                    tokenizer(ids_tensor.cpu()).dump_midi(path)
+                    tokenizer(ids).dump_midi(path)
                     return
-                except Exception as e:
-                    # regenerate if decode failed (rare)
+                except Exception:
                     pass
             print(f"[WARN] could not save {path} after {retries} tries")
 
