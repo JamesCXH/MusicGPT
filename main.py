@@ -147,7 +147,9 @@ if __name__ == '__main__':
         
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
-            tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+            # tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+            tok_list = sampled_tokens[i].cpu().tolist()
+            tokenizer(tok_list).dump_midi(outmidi)
 
         seed_sequences = []
         train_samples = []
@@ -181,12 +183,13 @@ if __name__ == '__main__':
         for i in range(config.sample.n_seed):
 
             outmidi = os.path.join(out_dir, f"train_sample{i+1}.mid")
-            tokenizer(input_ids[random_idx]).dump_midi(outmidi)
+            tok_list = generated_sequences[i].cpu().tolist()
+            tokenizer(tok_list).dump_midi(outmidi)
 
             outmidi = os.path.join(out_dir, f"continued_sample{i+1}.mid")
-            tokenizer(generated_sequences[i]).dump_midi(outmidi)
-            
-            
+            tok_list = generated_sequences[i].cpu().tolist()
+            tokenizer(tok_list).dump_midi(outmidi)
+
     # evaluate
     if config.pipeline.evaluate:
         pass
