@@ -214,6 +214,7 @@ if __name__ == '__main__':
             )
 
         # sanity print
+        print("\n[SANITY] First 30 scratch token ids:\n",
               scratch_tokens[0][:30].tolist())
         print("[SANITY] Decoded:\n",
               tokenizer.decode(scratch_tokens[0][1:21], skip_special_tokens=False))
