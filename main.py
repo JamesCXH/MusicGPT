@@ -200,6 +200,9 @@ if __name__ == '__main__':
         pad_id = tokenizer['PAD_None']
         bos_id = tokenizer['BOS_None']
         eos_id = tokenizer['EOS_None']
+        print(f"PAD ID {pad_id}")
+        print(f"BOS ID {bos_id}")
+        print(f"EOS ID {eos_id}")
 
 
         # ------------------------------------------------------------------
