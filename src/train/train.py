@@ -134,7 +134,7 @@ class Trainer():
                           f"batch {batch + 1:05d} | "
                           f"loss {self.loss.item():.4f} | "
                           f"{elapsed:.2f} for 1000 batches "
-                          f"({avg_ms:.1f} ms/batch)")
+                          f"({avg_ms:.1f} s/batch)")
                 
                 self.n_iter += 1
 
