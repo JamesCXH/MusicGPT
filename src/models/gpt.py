@@ -162,7 +162,8 @@ class GPT(nn.Module):
             {"params": [param_dict[pn] for pn in sorted(list(decay))], "weight_decay": train_config.weight_decay},
             {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
         ]
-        optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
+        optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas, fused=True)
+        # maybe fuse? ckpt_path = os.path.join(out_dir, f'{config.model.name}.pt')
         return optimizer
 
     def forward(self, input_ids, attention_mask=None, labels=None):

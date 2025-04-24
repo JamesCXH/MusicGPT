@@ -32,10 +32,13 @@ def split_data(tokenizer, files_paths, subset_name, max_seq_len, split, augment)
                         duration_offsets=[-0.5, 0.5])
     
     
-def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True, return_datasets=False, split=True, augment=True):
+def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True, return_datasets=False, split=True, augment=True, num_workers=12):
    
     # Search for both .mid and .midi extensions
     midipaths = list(Path(datapath).glob("**/*.mid")) + list(Path(datapath).glob("**/*.midi"))
+
+    print("GETTING DATA!!!!")
+    print("YEAH!!!!!")
 
     if not subsets:
         if not os.path.isdir((Path("..", "Midi_all"))): 
@@ -51,7 +54,14 @@ def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True,
         
         else:
             collator = DataCollator(tokenizer.pad_token_id, copy_inputs_as_labels=True)
-            dataloader= DataLoader(dataset, batch_size=batch_size, collate_fn=collator, shuffle=True)
+            dataloader= DataLoader(dataset,
+                                   batch_size=batch_size,
+                                   collate_fn=collator,
+                                   shuffle=True,
+                                   num_workers=num_workers,  # AdamW
+                                   pin_memory=True,  # good idea when using CUDA
+                                   persistent_workers=True
+                                   )
             print(f"Dataloader size: {len(dataloader)} batches")
             return dataloader
     
@@ -66,7 +76,7 @@ def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True,
         midi_paths_test = midipaths[num_files_valid:num_files_valid + num_files_test]
         midi_paths_train = midipaths[num_files_valid + num_files_test:]
     
-        # Chunk MIDIs and perform data augmentation on each subset independently
+        # Chunk MIDIs and perform data augmentation on each subset independently num_workers
         for files_paths, subset_name in ((midi_paths_train, "train"), (midi_paths_valid, "valid"), (midi_paths_test, "test")):
             split_data(tokenizer, files_paths, subset_name, max_seq_len, split, augment)
 

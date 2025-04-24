@@ -106,7 +106,7 @@ if __name__ == '__main__':
     wandb.init(project="MusicGen", config=config)
 
     dataloader = get_data(tokenizer, config.data, max_seq_len=config.model.block_size, batch_size=config.gpt_trainer.batch_size,
-                              subsets=False, return_datasets=False)
+                              subsets=False, return_datasets=False, num_workers=config.gpt_trainer.num_workers)
     
     if config.pipeline.train_gpt:
 
@@ -127,6 +127,7 @@ if __name__ == '__main__':
             if (trainer.n_iter + 1) % 200 == 0:
                 model.eval()
                 torch.save(model.state_dict(), ckpt_path)
+                print("SAVING A MODEL!")
             
                 # revert model to training mode
                 model.train()

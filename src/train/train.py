@@ -6,6 +6,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from collections import defaultdict
 from ..utils.general_utils import CfgNode as CN
 from torch.cuda.amp import autocast, GradScaler
+import time
 
 
 class Trainer():
@@ -39,7 +40,7 @@ class Trainer():
         self.model = model
         self.optimizer = model.configure_optimizers(config)
 
-        # Initialize the learning rate scheduler if enabled
+        # Initialize the learning rate scheduler if enabled optimizer =
         if config.use_lr_scheduler:
             self.scheduler = ReduceLROnPlateau(
                 self.optimizer, 
@@ -89,6 +90,8 @@ class Trainer():
         for epoch in range(config.epochs):
 
             for batch, encodings in enumerate(self.dataloader):
+                if batch % 200 == 0:
+                    start = time.perf_counter()
                 self.optimizer.zero_grad()
 
                 for k, v in encodings.items():
@@ -113,9 +116,12 @@ class Trainer():
                 self.n_examples += self.dataloader.batch_size
 
                 self.trigger_callbacks('on_batch_end')
-                
                 if batch % 200 == 0:
-                    print(f'epoch: {epoch + 1}, batch: {batch + 1}, loss: {self.loss.item()}')
+                    # print(f'epoch: {epoch + 1}, batch: {batch + 1}, loss: {self.loss.item()}')
+                    elapsed = time.perf_counter() - start
+                    print(f"epoch {epoch + 1:02d} | batch {batch + 1:05d} | "
+                          f"loss {self.loss.item():.4f} | "
+                          f"{elapsed * 1000:.1f} ms/batch")
                 
                 self.n_iter += 1
 

@@ -104,16 +104,15 @@ class MultiHeadAttention(nn.Module):
         self.n_embd = config.n_embd
         self.ROPE = None
 
-        # key, query, value projections
-        self.query = nn.Linear(config.n_embd, config.n_embd)
-        self.key = nn.Linear(config.n_embd, config.n_embd)
-        self.value = nn.Linear(config.n_embd, config.n_embd)
+        self.head_dim = config.n_embd // self.n_head
+        self.qkv = nn.Linear(config.n_embd, 3 * config.n_embd)
 
         # output projection
         self.out = nn.Linear(config.n_embd, config.n_embd)
 
         # regularization
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        # self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.dropout_p = config.attn_pdrop
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
         self.rope = config.rope
@@ -122,137 +121,134 @@ class MultiHeadAttention(nn.Module):
 
 
     def forward(self, x, mask=None):
-        q = self.query(x)
-        k = self.key(x)
-        v = self.value(x)
 
-        B, T, C = q.size() # batch size, sequence length, embedding dimensionality (n_embd)
+        B, T, _ = x.shape
+        qkv = self.qkv(x)  # (B, T, 3C)
+        qkv = qkv.view(B, T, 3, self.n_head, self.head_dim)
+        q, k, v = qkv.unbind(dim=2)  # each (B, T, H, D)
+        q, k, v = [t.transpose(1, 2) for t in (q, k, v)]  # (B, H, T, D)
 
-
-        # split the embedding dimension (n_embd) across the number of heads
-        # reshape the query, key, value tensors to increase efficiency of matrix multiplication
-        # b = batch size, t = sequence length, h = number of heads, d = n_embd / number of heads
-        q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_head)
-        k = rearrange(k, 'b t (h d) -> b h t d', h=self.n_head)
-        v = rearrange(v, 'b t (h d) -> b h t d', h=self.n_head)
-        
         if self.rope:
             q = self.ROPE(q)
             k = self.ROPE(k)
-        
-        # compute square root of (n_embd / number of heads) to scale the dot product
-        scale = math.sqrt(k.size(-1))
-        
-        # calculate the attention scores with the query and key
-        att = einsum(q, k, 'b h q d, b h k d -> b h q k') / scale
 
         if mask is not None:
-            att = att.masked_fill(mask == 1, float('-inf'))
-        
-        att_weights = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att_weights)
-        
-        # matrix multiplication of attention scores and value
-        y = einsum(att, v, 'b h q t, b h t d -> b h q d')
-        
-        # rearrange the output tensor to (batch size, sequence length, n_embd)
-        y = rearrange(y, 'b h q d -> b q (h d)') # re-assemble all head outputs side by side
+            assert mask.dim() == 4 \
+                   and mask.shape[0] == 1 \
+                   and mask.shape[1] == 1 \
+                   and mask.shape[2] == T \
+                   and mask.shape[3] == T, \
+                f"mask must have shape (1, 1, {T}, {T}); got {tuple(mask.shape)}"
+            attn_mask = mask.bool()  # True = block
+        else:
+            attn_mask = None
 
-        # output projection
-        y = self.resid_dropout(self.out(y))
-        
-        return y, att_weights
+        # attn_mask = mask.bool() if mask is not None else None
 
-class GroupedQueryAttention(nn.Module):
-    """
-    An implementation of group query attention. Refer to the CausalSelfAttention class to structure your implementation.
-    """
+        ctx = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout_p,
+        )
 
-    def __init__(self, config):
-        super().__init__()
+        # Flash kernel doesn’t return weights; return None to keep signature.
+        ctx = ctx.transpose(1, 2).contiguous().view(B, T, -1)  # (B, T, C)
+        out = self.resid_dropout(self.out(ctx))
+        return out, None
 
-        """
-        Implementation of grouped query attention
-        """
+# class GroupedQueryAttention(nn.Module):
+#     """
+#     An implementation of group query attention. Refer to the CausalSelfAttention class to structure your implementation.
+#     """
+#
+#     def __init__(self, config):
+#         super().__init__()
+#
+#         """
+#         Implementation of grouped query attention
+#         """
+#
+#         assert config.n_embd % config.n_query_head == 0
+#         assert config.n_embd % config.n_kv_head == 0
+#         assert config.n_query_head % config.n_kv_head == 0
+#
+#         self.n_query_head = config.n_query_head
+#         self.n_kv_head = config.n_kv_head
+#         self.group_size = self.n_query_head // self.n_kv_head
+#         self.n_embd = config.n_embd
+#         self.head_dim = config.n_embd // config.n_query_head
+#         self.ROPE = None
+#
+#         # Key, Query, Value Projections
+#         self.query = nn.Linear(self.n_embd, self.n_embd)
+#         self.key = nn.Linear(self.n_embd, self.head_dim * self.n_kv_head)
+#         self.value = nn.Linear(self.n_embd, self.head_dim * self.n_kv_head)
+#
+#         # Output Projection
+#         self.out = nn.Linear(self.head_dim * self.n_query_head, self.n_embd)
+#
+#         # regularization
+#         self.attn_dropout = nn.Dropout(config.attn_pdrop)
+#         self.resid_dropout = nn.Dropout(config.resid_pdrop)
+#
+#         self.rope = config.rope
+#         if self.rope:
+#             self.ROPE = RotaryPositionalEmbeddings(self.head_dim)
+#
+#
+#     def forward(self, x, mask=None):
+#         q = self.query(x)
+#         k = self.key(x)
+#         v = self.value(x)
+#
+#         B, T, C = q.size() # batch size, sequence length, embedding dimensionality (n_embd)
+#
+#         # split across heads by introducing an additional 'h' dimension
+#         # reshape the query, key, value tensors to increase efficiency of matrix multiplication
+#         # b = batch size, t = sequence length, h = number of heads, dk
+#         q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_query_head)
+#         k = rearrange(k, 'b t (h d) -> b h t d', h=self.n_kv_head)
+#         v = rearrange(v, 'b t (h d) -> b h t d', h=self.n_kv_head)
+#
+#         if self.rope:
+#             q = self.ROPE(q)
+#             k = self.ROPE(k)
+#
+#         q = rearrange(q, 'b (h g) t d -> b g h t d', g=self.group_size)
+#
+#         # compute square root of (n_embd / number of heads) to scale the dot product
+#         scale = math.sqrt(k.size(-1))
+#
+#         # calculate the attention scores with the query and  key
+#         att = einsum(q, k, 'b g h q d, b h k d -> b g h q k') / scale
+#
+#         if mask is not None:
+#             # Unsqueeze to add dimensions for group size (G) and heads per group (H)
+#             mask = mask.unsqueeze(1)  # Shape: (64, 1, 1, 86, 86)
+#
+#             # Expand to match attention tensor (att) shape
+#             mask = mask.expand(-1, att.size(1), att.size(2), -1, -1)  # (64, 2, 4, 86, 86)
+#
+#             # Apply the mask
+#             att = att.masked_fill(mask == 1, float('-inf'))
+#
+#         att_weights = F.softmax(att, dim=-1)
+#         att = self.attn_dropout(att_weights)
+#
+#         # matrix multiplication of attention scores and value
+#         y = einsum(att, v, 'b g h q k, b h k d -> b g h q d')
+#
+#         # rearrange the output tensor to (batch size, sequence length, n_embd)
+#         y = rearrange(y, 'b g h q d -> b q (h g) d') # re-assemble all head outputs side by side
+#         y = rearrange(y, 'b q h d -> b q (h d)')
+#
+#         # output projection
+#         y = self.resid_dropout(self.out(y))
+#
+#         return y, att_weights
 
-        assert config.n_embd % config.n_query_head == 0
-        assert config.n_embd % config.n_kv_head == 0
-        assert config.n_query_head % config.n_kv_head == 0
-
-        self.n_query_head = config.n_query_head
-        self.n_kv_head = config.n_kv_head
-        self.group_size = self.n_query_head // self.n_kv_head
-        self.n_embd = config.n_embd
-        self.head_dim = config.n_embd // config.n_query_head
-        self.ROPE = None
-
-        # Key, Query, Value Projections
-        self.query = nn.Linear(self.n_embd, self.n_embd) 
-        self.key = nn.Linear(self.n_embd, self.head_dim * self.n_kv_head) 
-        self.value = nn.Linear(self.n_embd, self.head_dim * self.n_kv_head) 
-
-        # Output Projection
-        self.out = nn.Linear(self.head_dim * self.n_query_head, self.n_embd)  
-
-        # regularization
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
-
-        self.rope = config.rope
-        if self.rope:
-            self.ROPE = RotaryPositionalEmbeddings(self.head_dim)
-            
-
-    def forward(self, x, mask=None):
-        q = self.query(x)
-        k = self.key(x)
-        v = self.value(x)
-
-        B, T, C = q.size() # batch size, sequence length, embedding dimensionality (n_embd)
-
-        # split across heads by introducing an additional 'h' dimension
-        # reshape the query, key, value tensors to increase efficiency of matrix multiplication
-        # b = batch size, t = sequence length, h = number of heads, dk
-        q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_query_head)
-        k = rearrange(k, 'b t (h d) -> b h t d', h=self.n_kv_head)
-        v = rearrange(v, 'b t (h d) -> b h t d', h=self.n_kv_head)
-        
-        if self.rope:
-            q = self.ROPE(q)
-            k = self.ROPE(k)        
-
-        q = rearrange(q, 'b (h g) t d -> b g h t d', g=self.group_size)
-        
-        # compute square root of (n_embd / number of heads) to scale the dot product
-        scale = math.sqrt(k.size(-1))
-        
-        # calculate the attention scores with the query and  key
-        att = einsum(q, k, 'b g h q d, b h k d -> b g h q k') / scale
-
-        if mask is not None:
-            # Unsqueeze to add dimensions for group size (G) and heads per group (H)
-            mask = mask.unsqueeze(1)  # Shape: (64, 1, 1, 86, 86)
-
-            # Expand to match attention tensor (att) shape
-            mask = mask.expand(-1, att.size(1), att.size(2), -1, -1)  # (64, 2, 4, 86, 86)
-
-            # Apply the mask
-            att = att.masked_fill(mask == 1, float('-inf'))
-        
-        att_weights = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att_weights)
-
-        # matrix multiplication of attention scores and value
-        y = einsum(att, v, 'b g h q k, b h k d -> b g h q d')
-
-        # rearrange the output tensor to (batch size, sequence length, n_embd)
-        y = rearrange(y, 'b g h q d -> b q (h g) d') # re-assemble all head outputs side by side
-        y = rearrange(y, 'b q h d -> b q (h d)')
-       
-        # output projection
-        y = self.resid_dropout(self.out(y))
-
-        return y, att_weights
+class GroupedQueryAttention:
+    pass
     
 
 class Block(nn.Module):
@@ -262,7 +258,8 @@ class Block(nn.Module):
         super().__init__()
         self.ln_1 = nn.LayerNorm(config.n_embd)
         if config.n_query_head != config.n_kv_head:
-            self.attn = GroupedQueryAttention(config)
+            # self.attn = GroupedQueryAttention(config)
+            self.attn = None
         else:
             self.attn = MultiHeadAttention(config)
         self.ln_2 = nn.LayerNorm(config.n_embd)
