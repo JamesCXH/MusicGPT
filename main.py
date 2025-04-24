@@ -98,7 +98,7 @@ if __name__ == '__main__':
     if config.model.pretrained != None:
         print("Loading pretrained model...")
         pretrained_state_dict = torch.load(config.model.pretrained, weights_only=True)
-        model.load_state_dict(pretrained_state_dict, strict=False) 
+        model.load_state_dict(pretrained_state_dict, strict=True)
     
     setup_logging(config)
     out_dir = config.system.work_dir
@@ -147,9 +147,7 @@ if __name__ == '__main__':
         
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
-            # tokenizer(sampled_tokens[i]).dump_midi(outmidi)
-            tok_list = sampled_tokens[i].cpu().tolist()
-            tokenizer(tok_list).dump_midi(outmidi)
+            tokenizer(sampled_tokens[i]).dump_midi(outmidi)
 
         seed_sequences = []
         train_samples = []
@@ -183,12 +181,11 @@ if __name__ == '__main__':
         for i in range(config.sample.n_seed):
 
             outmidi = os.path.join(out_dir, f"train_sample{i+1}.mid")
-            tok_list = generated_sequences[i].cpu().tolist()
-            tokenizer(tok_list).dump_midi(outmidi)
+            tokenizer(input_ids[random_idx]).dump_midi(outmidi)
 
             outmidi = os.path.join(out_dir, f"continued_sample{i+1}.mid")
-            tok_list = generated_sequences[i].cpu().tolist()
-            tokenizer(tok_list).dump_midi(outmidi)
+            tokenizer(generated_sequences[i]).dump_midi(outmidi)
+
 
     # evaluate
     if config.pipeline.evaluate:
