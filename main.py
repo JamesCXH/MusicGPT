@@ -122,7 +122,7 @@ if __name__ == '__main__':
             sys.exit(1)
 
         tokenizer = REMI()  # start empty
-        tokenizer.load_params(Path(config.tokenizer_path))
+        tokenizer.load(Path(config.tokenizer_path))
         print(f"✅  Loaded tokenizer from {config.tokenizer_path}")
 
     if not config.pipeline.train_token:
@@ -184,6 +184,8 @@ if __name__ == '__main__':
     # sample
     if config.pipeline.sample:
 
+        model.eval()
+
         sampled_tokens = model.sample(size=config.sample.n_scratch, max_new_tokens=config.model.block_size,
                                       device=None, verbose=True, bos_token_id=1, pad_token_id=0)
 
@@ -228,6 +230,7 @@ if __name__ == '__main__':
             outmidi = os.path.join(out_dir, f"continued_sample{i+1}.mid")
             tokenizer(generated_sequences[i]).dump_midi(outmidi)
 
+        model.train()
 
     if config.pipeline.evaluate:
         pass
