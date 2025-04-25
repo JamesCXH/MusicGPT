@@ -245,10 +245,12 @@ if __name__ == '__main__':
         for i in range(config.sample.n_seed):
 
             outmidi = os.path.join(out_dir, f"train_sample{i+1}.midi")
-            tokenizer(input_ids[random_idx]).dump_midi(outmidi)
+            # tokenizer(input_ids[random_idx]).dump_midi(outmidi)
+            _write_midi(tokenizer, train_samples[i], outmidi)
 
             outmidi = os.path.join(out_dir, f"continued_sample{i+1}.midi")
-            tokenizer(generated_sequences[i]).dump_midi(outmidi)
+            # tokenizer(generated_sequences[i]).dump_midi(outmidi)
+            _write_midi(tokenizer, generated_sequences[i], outmidi)
 
         model.train()
 
