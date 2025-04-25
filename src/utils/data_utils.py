@@ -53,7 +53,7 @@ def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True,
             return dataset
         
         else:
-            collator = DataCollator(tokenizer.pad_token_id, copy_inputs_as_labels=True)
+            collator = DataCollator(pad_token_id=tokenizer.pad_token_id, bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id, copy_inputs_as_labels=True)
             dataloader= DataLoader(dataset,
                                    batch_size=batch_size,
                                    collate_fn=collator,
@@ -96,7 +96,7 @@ def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True,
             return {"train": dataset_train, "valid": dataset_valid, "test": dataset_test}
         
         else:
-            collator = DataCollator(tokenizer.pad_token_id, copy_inputs_as_labels=True)
+            collator = DataCollator(pad_token_id=tokenizer.pad_token_id, bos_token_id=tokenizer.bos_token_id, eos_token_id=tokenizer.eos_token_id, copy_inputs_as_labels=True)
             dataloader_train = DataLoader(dataset_train, batch_size=batch_size, collate_fn=collator)
             dataloader_valid = DataLoader(dataset_valid, batch_size=batch_size, collate_fn=collator)
             dataloader_test = DataLoader(dataset_test, batch_size=batch_size, collate_fn=collator)
