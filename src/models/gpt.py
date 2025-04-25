@@ -54,6 +54,7 @@ class GPT(nn.Module):
         assert config.block_size is not None
         self.block_size = config.block_size
         self.rope = config.rope
+        self.config = config
 
         modules = dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
@@ -202,8 +203,19 @@ class GPT(nn.Module):
         if labels is not None:
             shift_logits = logits[..., :-1, :].contiguous().to(device)
             shift_labels = labels[..., 1:].contiguous().to(device)
+            print("SEARCHING BAD")
+            bad = (shift_labels >= self.config.model.vocab_size) | (shift_labels < 0)
+            if bad.any():
+                ids = shift_labels[bad].unique()
+                print("❌ bad token ids:", ids, "  max seen:",
+                      shift_labels.max().item(), "  vocab_size:", self.config.model.vocab_size)
+                raise ValueError("label out of range")
+
+            print("INSTANTIATING LOSS!")
             loss_fn = nn.CrossEntropyLoss(ignore_index=0) # ASSUMED PAD TOKEN ID is 0 IMPORTANT!!!!!
+            print("CALCULATING LOSS!!")
             loss = loss_fn(shift_logits.transpose(1, 2), shift_labels)
+            print("ABOUT TO RETURN!")
             return loss, logits
             
         else:

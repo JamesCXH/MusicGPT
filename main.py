@@ -118,7 +118,7 @@ if __name__ == '__main__':
             print("❌  Pass --tokenizer_path=<path/to/MidiTokenizer.json> "
                   "or set pipeline.train_token=True to create one.")
             sys.exit(1)
-        tokenizer = REMI(params=Path(config.tokenizer_path), tokenizer_config=TokenizerConfig(num_velocities=16, use_chords=True, use_programs=True))
+        tokenizer = REMI(params=Path(config.tokenizer_path))
         print(f"✅  Loaded tokenizer from {config.tokenizer_path}")
 
     # if not config.pipeline.train_token:
