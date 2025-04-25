@@ -190,6 +190,15 @@ if __name__ == '__main__':
         sampled_tokens = model.sample(size=config.sample.n_scratch, max_new_tokens=config.model.block_size,
                                       device=None, verbose=True, bos_token_id=1, pad_token_id=0)
 
+        pad_mask = sampled_tokens.eq(0)  # boolean tensor
+        pad_per_sequence = pad_mask.sum(dim=1)  # 1-D tensor, length = size
+        total_pad = pad_per_sequence.sum().item()
+        total_tokens = sampled_tokens.numel()
+        ratio = total_pad / total_tokens * 100
+
+        print(f"PAD tokens per sequence : {pad_per_sequence.tolist()}")
+        print(f"Total PAD tokens        : {total_pad:,} / {total_tokens:,}"
+              f"  ({ratio:.2f}% of all tokens)")
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
             # tokenizer(sampled_tokens[i]).dump_midi(outmidi)
