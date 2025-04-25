@@ -204,7 +204,7 @@ class GPT(nn.Module):
             shift_logits = logits[..., :-1, :].contiguous().to(device)
             shift_labels = labels[..., 1:].contiguous().to(device)
             print("SEARCHING BAD")
-            bad = (shift_labels >= 30000) | (shift_labels < 0)
+            bad = (shift_labels >= 30000) | (shift_labels <= 0)
             if bad.any():
                 ids = shift_labels[bad].unique()
                 print("❌ bad token ids:", ids, "  max seen:",
@@ -212,7 +212,7 @@ class GPT(nn.Module):
                 raise ValueError("label out of range")
 
             print("INSTANTIATING LOSS!")
-            loss_fn = nn.CrossEntropyLoss(ignore_index=0) # ASSUMED PAD TOKEN ID is 0 IMPORTANT!!!!!
+            loss_fn = nn.CrossEntropyLoss(ignore_index=-100) # ASSUMED PAD TOKEN ID is 0 IMPORTANT!!!!!
             print("CALCULATING LOSS!!")
             loss = loss_fn(shift_logits.transpose(1, 2), shift_labels)
             print("ABOUT TO RETURN!")
