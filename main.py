@@ -113,22 +113,17 @@ if __name__ == '__main__':
         config.tokenizer_path = str(tok_path)
 
     else:
-        # ---------------------------------------------------------------------
-        #  Re-use an existing tokenizer
-        # ---------------------------------------------------------------------
+        print("USING EXISTING TOKENIZER!!!")
         if config.tokenizer_path is None:
             print("❌  Pass --tokenizer_path=<path/to/MidiTokenizer.json> "
                   "or set pipeline.train_token=True to create one.")
             sys.exit(1)
-
-        # tokenizer = REMI()  # start empty
-        # tokenizer.load_params(Path(config.tokenizer_path))
         tokenizer = REMI(params=Path(config.tokenizer_path))
         print(f"✅  Loaded tokenizer from {config.tokenizer_path}")
 
-    if not config.pipeline.train_token:
-        tokenizer_config = TokenizerConfig(num_velocities=16, use_chords=True, use_programs=True)
-        tokenizer = REMI(tokenizer_config)
+    # if not config.pipeline.train_token:
+    #     tokenizer_config = TokenizerConfig(num_velocities=16, use_chords=True, use_programs=True)
+    #     tokenizer = REMI(tokenizer_config)
 
     # construct the model
     config.model.vocab_size = len(tokenizer)
@@ -188,8 +183,8 @@ if __name__ == '__main__':
         model.eval()
 
         sampled_tokens = model.sample(size=config.sample.n_scratch, max_new_tokens=config.model.block_size,
-                                      device=None, verbose=True, bos_token_id=1, pad_token_id=0)
-
+                                      device=None, verbose=True, bos_token_id=1, pad_token_id=0, eos_token_id=2)
+        # DataCollator
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
             tokenizer(sampled_tokens[i]).dump_midi(outmidi)

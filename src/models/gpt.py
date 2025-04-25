@@ -202,7 +202,7 @@ class GPT(nn.Module):
         if labels is not None:
             shift_logits = logits[..., :-1, :].contiguous().to(device)
             shift_labels = labels[..., 1:].contiguous().to(device)
-            loss_fn = nn.CrossEntropyLoss()
+            loss_fn = nn.CrossEntropyLoss(ignore_index=0) # ASSUMED PAD TOKEN ID is 0 IMPORTANT!!!!!
             loss = loss_fn(shift_logits.transpose(1, 2), shift_labels)
             return loss, logits
             
@@ -215,7 +215,7 @@ class GPT(nn.Module):
     
 
     def sample(self, start_tokens=None, size=1, temperature=1.0, max_new_tokens=1024,
-               device=None, verbose=True, bos_token_id=1, pad_token_id=0): 
+               device=None, verbose=True, bos_token_id=1, pad_token_id=0, eos_token_id=2):
 
         if device is None:
             device = next(self.parameters()).device
