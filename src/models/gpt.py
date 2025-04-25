@@ -203,19 +203,19 @@ class GPT(nn.Module):
         if labels is not None:
             shift_logits = logits[..., :-1, :].contiguous().to(device)
             shift_labels = labels[..., 1:].contiguous().to(device)
-            print("SEARCHING BAD")
-            bad = (shift_labels >= 30000) | (shift_labels <= 0)
-            if bad.any():
-                ids = shift_labels[bad].unique()
-                print("❌ bad token ids:", ids, "  max seen:",
-                      shift_labels.max().item(), "  vocab_size:", 30000)
-                # raise ValueError("label out of range")
+            # print("SEARCHING BAD")
+            # bad = (shift_labels >= 30000) | (shift_labels <= 0)
+            # if bad.any():
+            #     ids = shift_labels[bad].unique()
+            #     print("❌ bad token ids:", ids, "  max seen:",
+            #           shift_labels.max().item(), "  vocab_size:", 30000)
+            #     # raise ValueError("label out of range")
 
-            print("INSTANTIATING LOSS!")
+            # print("INSTANTIATING LOSS!")
             loss_fn = nn.CrossEntropyLoss(ignore_index=-100) # ASSUMED PAD TOKEN ID is 0 IMPORTANT!!!!!
-            print("CALCULATING LOSS!!")
+            # print("CALCULATING LOSS!!")
             loss = loss_fn(shift_logits.transpose(1, 2), shift_labels)
-            print("ABOUT TO RETURN!")
+            # print("ABOUT TO RETURN!")
             return loss, logits
             
         else:
