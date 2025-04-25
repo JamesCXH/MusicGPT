@@ -91,11 +91,23 @@ if __name__ == '__main__':
     # -------------------------------------------------------------------------
     if config.pipeline.train_token:
         # 1) Build a tokenizer *configuration* (tweak these params as you wish)
-        tokenizer_config = TokenizerConfig(
-            num_velocities=16,
-            use_chords=True,
-            use_programs=True,
-        )
+
+        BEAT_RES = {(0, 1): 12, (1, 2): 4, (2, 4): 2, (4, 8): 1}
+        TOKENIZER_PARAMS = {
+            "pitch_range": (21, 109),
+            "beat_res": BEAT_RES,
+            "num_velocities": 24,
+            "special_tokens": ["PAD", "BOS", "EOS"],
+            "use_chords": True,
+            "use_rests": True,
+            "use_tempos": True,
+            "use_time_signatures": True,
+            "use_programs": False,  # no multitrack here
+            "num_tempos": 32,
+            "tempo_range": (50, 200),  # (min_tempo, max_tempo)
+        }
+
+        tokenizer_config = TokenizerConfig(**TOKENIZER_PARAMS)
         tokenizer = REMI(tokenizer_config)
 
         # 2) Train it on every MIDI file found under `config.data`
@@ -104,12 +116,12 @@ if __name__ == '__main__':
         tokenizer.train(vocab_size=30_000, files_paths=midi_files)
 
         # 3) Save once so later runs can reuse it
-        tok_path = Path(config.system.work_dir) / "MidiTokenizer.json"
+        tok_path = Path(config.system.work_dir) / "NEWMidiTokenizer.json"
         tok_path.parent.mkdir(parents=True, exist_ok=True)
         tokenizer.save(tok_path)
         print(f"✅  Tokenizer saved to {tok_path}")
 
-        # 4) Store the path in the runtime config (helpful if you later `wandb` log)
+        # 4) Store the path in the runtime config (helpful if you later `wandb` log) from tokenizers
         config.tokenizer_path = str(tok_path)
 
     else:
@@ -121,9 +133,6 @@ if __name__ == '__main__':
         tokenizer = REMI(params=Path(config.tokenizer_path))
         print(f"✅  Loaded tokenizer from {config.tokenizer_path}")
 
-    # if not config.pipeline.train_token:
-    #     tokenizer_config = TokenizerConfig(num_velocities=16, use_chords=True, use_programs=True)
-    #     tokenizer = REMI(tokenizer_config)
 
     # construct the model
     config.model.vocab_size = len(tokenizer)
