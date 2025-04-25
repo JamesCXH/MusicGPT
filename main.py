@@ -121,8 +121,9 @@ if __name__ == '__main__':
                   "or set pipeline.train_token=True to create one.")
             sys.exit(1)
 
-        tokenizer = REMI()  # start empty
-        tokenizer.load(Path(config.tokenizer_path))
+        # tokenizer = REMI()  # start empty
+        # tokenizer.load_params(Path(config.tokenizer_path))
+        tokenizer = REMI(params=Path(config.tokenizer_path))
         print(f"✅  Loaded tokenizer from {config.tokenizer_path}")
 
     if not config.pipeline.train_token:
