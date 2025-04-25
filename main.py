@@ -197,7 +197,9 @@ if __name__ == '__main__':
         # DataCollator
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.midi")
-            tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+            # tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+            tokens = sampled_tokens[i].tolist()
+            tokenizer.decode(tokens).dump_midi(outmidi)
 
         seed_sequences = []
         train_samples = []
