@@ -21,6 +21,19 @@ from src.utils.data_utils import get_data, split_data
 
 wandb.login()
 
+# ── in main.py – put this near the top, after imports ────────────────
+def _write_midi(tok, tokens, path):
+    """
+    tok      : a miditok tokenizer
+    tokens   : 1-D torch.Tensor | list[int]
+    path     : output .mid/.midi file
+    """
+    if isinstance(tokens, torch.Tensor):
+        tokens = tokens.tolist()
+    tok([tokens]).dump_midi(path)          # <- wrap in a list --> 2-D
+# --------------------------------------------------------------------
+
+
 # -----------------------------------------------------------------------------
 
 def get_config():
@@ -198,8 +211,7 @@ if __name__ == '__main__':
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.midi")
             # tokenizer(sampled_tokens[i]).dump_midi(outmidi)
-            tokens = sampled_tokens[i].tolist()
-            tokenizer.decode(tokens).dump_midi(outmidi)
+            _write_midi(tokenizer, sampled_tokens[i], outmidi)
 
         seed_sequences = []
         train_samples = []
