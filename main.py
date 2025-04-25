@@ -133,6 +133,7 @@ if __name__ == '__main__':
         tokenizer = REMI(params=Path(config.tokenizer_path))
         print(f"✅  Loaded tokenizer from {config.tokenizer_path}")
 
+    print(f"TOKENIZER LENGTH {len(tokenizer)}")
 
     # construct the model
     config.model.vocab_size = len(tokenizer)
@@ -195,7 +196,7 @@ if __name__ == '__main__':
                                       device=None, verbose=True, bos_token_id=1, pad_token_id=0, eos_token_id=2)
         # DataCollator
         for i in range(config.sample.n_scratch):
-            outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
+            outmidi = os.path.join(out_dir, f"scratch{i+1}.midi")
             tokenizer(sampled_tokens[i]).dump_midi(outmidi)
 
         seed_sequences = []
@@ -229,10 +230,10 @@ if __name__ == '__main__':
         # Save seeded samples
         for i in range(config.sample.n_seed):
 
-            outmidi = os.path.join(out_dir, f"train_sample{i+1}.mid")
+            outmidi = os.path.join(out_dir, f"train_sample{i+1}.midi")
             tokenizer(input_ids[random_idx]).dump_midi(outmidi)
 
-            outmidi = os.path.join(out_dir, f"continued_sample{i+1}.mid")
+            outmidi = os.path.join(out_dir, f"continued_sample{i+1}.midi")
             tokenizer(generated_sequences[i]).dump_midi(outmidi)
 
         model.train()
