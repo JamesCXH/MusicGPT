@@ -192,7 +192,9 @@ if __name__ == '__main__':
 
         for i in range(config.sample.n_scratch):
             outmidi = os.path.join(out_dir, f"scratch{i+1}.mid")
-            tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+            # tokenizer(sampled_tokens[i]).dump_midi(outmidi)
+            clean = sampled_tokens[i][sampled_tokens[i] != 0]  # strip PADs
+            tokenizer(clean.cpu()).dump_midi(outmidi)
 
         seed_sequences = []
         train_samples = []
