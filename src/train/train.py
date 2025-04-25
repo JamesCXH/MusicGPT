@@ -105,9 +105,6 @@ class Trainer():
                     self.loss, logits, *_ = self.model(**encodings)
 
                 model.zero_grad(set_to_none=True)
-                # self.loss.backward()
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                # self.optimizer.step()
                 self.scaler.scale(self.loss).backward()
                 self.scaler.unscale_(self.optimizer)  # because we need unscaled for grad clip
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(),
@@ -119,12 +116,6 @@ class Trainer():
                 self.n_examples += self.dataloader.batch_size
 
                 self.trigger_callbacks('on_batch_end')
-                # if batch % 200 == 0:
-                #     # print(f'epoch: {epoch + 1}, batch: {batch + 1}, loss: {self.loss.item()}')
-                #     elapsed = time.perf_counter() - start
-                #     print(f"epoch {epoch + 1:02d} | batch {batch + 1:05d} | "
-                #           f"loss {self.loss.item():.4f} | "
-                #           f"{elapsed * 1000:.1f} ms/batch")
                 if (batch + 1) % 1000 == 0:
                     if self.device.startswith("cuda"):
                         torch.cuda.synchronize()
