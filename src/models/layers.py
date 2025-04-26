@@ -89,7 +89,6 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         #print(f'x shape: {x.size()}, cos shape: {self.cos_cache.size()}, sin shape: {self.sin_cache.size()}')
         return (x * cos_matrix) + (torch.concat((-second_half, first_half), dim=-1) * sin_matrix)
-        
 
 
 class MultiHeadAttention(nn.Module):
@@ -106,70 +105,142 @@ class MultiHeadAttention(nn.Module):
         self.n_embd = config.n_embd
         self.ROPE = None
 
-        self.head_dim = config.n_embd // self.n_head
-        self.qkv = nn.Linear(config.n_embd, 3 * config.n_embd)
+        # key, query, value projections
+        self.query = nn.Linear(config.n_embd, config.n_embd)
+        self.key = nn.Linear(config.n_embd, config.n_embd)
+        self.value = nn.Linear(config.n_embd, config.n_embd)
 
         # output projection
         self.out = nn.Linear(config.n_embd, config.n_embd)
 
         # regularization
-        # self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.dropout_p = config.attn_pdrop
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
         self.rope = config.rope
         if self.rope:
             self.ROPE = RotaryPositionalEmbeddings(self.n_embd // self.n_head)
 
-
     def forward(self, x, mask=None):
+        q = self.query(x)
+        k = self.key(x)
+        v = self.value(x)
 
-        B, T, _ = x.shape
-        qkv = self.qkv(x)  # (B, T, 3C)
-        qkv = qkv.view(B, T, 3, self.n_head, self.head_dim)
-        q, k, v = qkv.unbind(dim=2)  # each (B, T, H, D)
-        q, k, v = [t.transpose(1, 2) for t in (q, k, v)]  # (B, H, T, D)
+        B, T, C = q.size()  # batch size, sequence length, embedding dimensionality (n_embd)
+
+        # split the embedding dimension (n_embd) across the number of heads
+        # reshape the query, key, value tensors to increase efficiency of matrix multiplication
+        # b = batch size, t = sequence length, h = number of heads, d = n_embd / number of heads
+        q = rearrange(q, 'b t (h d) -> b h t d', h=self.n_head)
+        k = rearrange(k, 'b t (h d) -> b h t d', h=self.n_head)
+        v = rearrange(v, 'b t (h d) -> b h t d', h=self.n_head)
 
         if self.rope:
             q = self.ROPE(q)
             k = self.ROPE(k)
 
+        # compute square root of (n_embd / number of heads) to scale the dot product
+        scale = math.sqrt(k.size(-1))
+
+        # calculate the attention scores with the query and key
+        att = einsum(q, k, 'b h q d, b h k d -> b h q k') / scale
+
         if mask is not None:
-            assert mask.dim() == 4 \
-                   and mask.shape[0] == B \
-                   and mask.shape[1] == 1 \
-                   and mask.shape[2] == T \
-                   and mask.shape[3] == T, \
-                f"mask must have shape (1, 1, {T}, {T}); got {tuple(mask.shape)}"
-            attn_mask = mask.bool()  # True = block
-        else:
-            attn_mask = None
+            att = att.masked_fill(mask == 1, float('-inf'))
 
-        # attn_mask = mask.bool() if mask is not None else None
-        # -------------------------------------------------------------
-        # DEBUG: verify that padding positions are really masked out
-        if attn_mask is not None:  # attn_mask shape (B, 1, 1/Tx, T)
-            # convert to a simple 0/1 vector: 1 = BLOCKED, 0 = ALLOWED
-            # if attn_mask.dtype == torch.bool:
-            #     blocked = (~attn_mask)[0, 0, 0]  # invert: True = keep → blocked = ~
-            # else:  # additive float mask (-∞ where we want to block)
-            # blocked = attn_mask[0, 0, 0]  # True where -∞
-            # print("DEBUG - blocked positions for sample-0:",
-            #       blocked)  # e.g. [1, 1, 0, 0, 0, …]
-            # sys.exit(1)
-            attn_mask = ~attn_mask
-        # -------------------------------------------------------------
+        att_weights = F.softmax(att, dim=-1)
+        att = self.attn_dropout(att_weights)
 
-        ctx = F.scaled_dot_product_attention(
-            q, k, v,
-            attn_mask=attn_mask,
-            dropout_p=self.dropout_p,
-        )
+        # matrix multiplication of attention scores and value
+        y = einsum(att, v, 'b h q t, b h t d -> b h q d')
 
-        # Flash kernel doesn’t return weights; return None to keep signature.
-        ctx = ctx.transpose(1, 2).contiguous().view(B, T, -1)  # (B, T, C)
-        out = self.resid_dropout(self.out(ctx))
-        return out, None
+        # rearrange the output tensor to (batch size, sequence length, n_embd)
+        y = rearrange(y, 'b h q d -> b q (h d)')  # re-assemble all head outputs side by side
+
+        # output projection
+        y = self.resid_dropout(self.out(y))
+
+        return y, att_weights
+
+#
+# class MultiHeadAttention(nn.Module):
+#     """
+#     A vanilla multi-head masked self-attention layer with a projection at the end.
+#     It is possible to use torch.nn.MultiheadAttention here but I am including an
+#     explicit implementation here to show that there is nothing too scary here.
+#     """
+#
+#     def __init__(self, config):
+#         super().__init__()
+#         assert config.n_embd % config.n_query_head == 0
+#         self.n_head = config.n_query_head
+#         self.n_embd = config.n_embd
+#         self.ROPE = None
+#
+#         self.head_dim = config.n_embd // self.n_head
+#         self.qkv = nn.Linear(config.n_embd, 3 * config.n_embd)
+#
+#         # output projection
+#         self.out = nn.Linear(config.n_embd, config.n_embd)
+#
+#         # regularization
+#         # self.attn_dropout = nn.Dropout(config.attn_pdrop)
+#         self.dropout_p = config.attn_pdrop
+#         self.resid_dropout = nn.Dropout(config.resid_pdrop)
+#
+#         self.rope = config.rope
+#         if self.rope:
+#             self.ROPE = RotaryPositionalEmbeddings(self.n_embd // self.n_head)
+#
+#
+#     def forward(self, x, mask=None):
+#
+#         B, T, _ = x.shape
+#         qkv = self.qkv(x)  # (B, T, 3C)
+#         qkv = qkv.view(B, T, 3, self.n_head, self.head_dim)
+#         q, k, v = qkv.unbind(dim=2)  # each (B, T, H, D)
+#         q, k, v = [t.transpose(1, 2) for t in (q, k, v)]  # (B, H, T, D)
+#
+#         if self.rope:
+#             q = self.ROPE(q)
+#             k = self.ROPE(k)
+#
+#         if mask is not None:
+#             assert mask.dim() == 4 \
+#                    and mask.shape[0] == B \
+#                    and mask.shape[1] == 1 \
+#                    and mask.shape[2] == T \
+#                    and mask.shape[3] == T, \
+#                 f"mask must have shape (1, 1, {T}, {T}); got {tuple(mask.shape)}"
+#             attn_mask = mask.bool()  # True = block
+#         else:
+#             attn_mask = None
+#
+#         # attn_mask = mask.bool() if mask is not None else None
+#         # -------------------------------------------------------------
+#         # DEBUG: verify that padding positions are really masked out
+#         if attn_mask is not None:  # attn_mask shape (B, 1, 1/Tx, T)
+#             # convert to a simple 0/1 vector: 1 = BLOCKED, 0 = ALLOWED
+#             # if attn_mask.dtype == torch.bool:
+#             #     blocked = (~attn_mask)[0, 0, 0]  # invert: True = keep → blocked = ~
+#             # else:  # additive float mask (-∞ where we want to block)
+#             # blocked = attn_mask[0, 0, 0]  # True where -∞
+#             # print("DEBUG - blocked positions for sample-0:",
+#             #       blocked)  # e.g. [1, 1, 0, 0, 0, …]
+#             # sys.exit(1)
+#             attn_mask = ~attn_mask
+#         # -------------------------------------------------------------
+#
+#         ctx = F.scaled_dot_product_attention(
+#             q, k, v,
+#             attn_mask=attn_mask,
+#             dropout_p=self.dropout_p,
+#         )
+#
+#         # Flash kernel doesn’t return weights; return None to keep signature.
+#         ctx = ctx.transpose(1, 2).contiguous().view(B, T, -1)  # (B, T, C)
+#         out = self.resid_dropout(self.out(ctx))
+#         return out, None
 
 # class GroupedQueryAttention(nn.Module):
 #     """
