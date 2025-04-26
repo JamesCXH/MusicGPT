@@ -22,15 +22,25 @@ from src.utils.data_utils import get_data, split_data
 wandb.login()
 
 # ── in main.py – put this near the top, after imports ────────────────
+# def _write_midi(tok, tokens, path):
+#     """
+#     tok      : a miditok tokenizer
+#     tokens   : 1-D torch.Tensor | list[int]
+#     path     : output .mid/.midi file
+#     """
+#     if isinstance(tokens, torch.Tensor):
+#         tokens = tokens.tolist()
+#     tok([tokens]).dump_midi(path)          # <- wrap in a list --> 2-D
 def _write_midi(tok, tokens, path):
     """
     tok      : a miditok tokenizer
     tokens   : 1-D torch.Tensor | list[int]
-    path     : output .mid/.midi file
+    path     : where to write the .mid/.midi file
     """
     if isinstance(tokens, torch.Tensor):
-        tokens = tokens.tolist()
-    tok([tokens]).dump_midi(path)          # <- wrap in a list --> 2-D
+        tokens = tokens.tolist()          #  <-- keep it 1-D
+    tok(tokens).dump_midi(path)           #  <-- no extra [ ... ]
+
 # --------------------------------------------------------------------
 
 
