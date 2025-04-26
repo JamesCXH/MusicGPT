@@ -153,10 +153,11 @@ class MultiHeadAttention(nn.Module):
             # if attn_mask.dtype == torch.bool:
             #     blocked = (~attn_mask)[0, 0, 0]  # invert: True = keep → blocked = ~
             # else:  # additive float mask (-∞ where we want to block)
-            blocked = attn_mask[0, 0, 0]  # True where -∞
-            print("DEBUG - blocked positions for sample-0:",
-                  blocked)  # e.g. [1, 1, 0, 0, 0, …]
-            sys.exit(1)
+            # blocked = attn_mask[0, 0, 0]  # True where -∞
+            # print("DEBUG - blocked positions for sample-0:",
+            #       blocked)  # e.g. [1, 1, 0, 0, 0, …]
+            # sys.exit(1)
+            attn_mask = ~attn_mask
         # -------------------------------------------------------------
 
         ctx = F.scaled_dot_product_attention(

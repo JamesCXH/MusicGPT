@@ -193,9 +193,6 @@ class GPT(nn.Module):
             combined_mask = causal_mask
 
 
-        print("DEBUG - INPUT IDs:\n", input_ids[0])
-
-
         for block in self.transformer.h:
             x = block(x, mask=combined_mask)
 
