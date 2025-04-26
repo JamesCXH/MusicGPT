@@ -105,41 +105,50 @@ if __name__ == '__main__':
     if config.pipeline.train_token:
         # 1) Build a tokenizer *configuration* (tweak these params as you wish)
 
-        BEAT_RES = {
-            (0, 1): 8,
-            (1, 2): 8,
-            (1, 3): 3,
-            (2, 4): 4,
-            (2, 6): 3,
-            (4, 8): 2,
-        }
-
-        TOKENIZER_PARAMS = {
-            "pitch_range": (21, 108),  # exact 88-key range
-            "beat_res": BEAT_RES,
-            "num_velocities": 32,  # 4-point resolution
-            "special_tokens": ["PAD", "BOS", "EOS", "MASK"],
-            "use_chords": False,  # simpler for solo piano
-            "use_rests": True,
-            "use_tempos": True,
-            "use_time_signatures": True,
-            "use_programs": False,
-            "num_tempos": 32,
-            "tempo_range": (40, 220),  # wider just in case
-        }
-
-        tokenizer = REMI(TokenizerConfig(**TOKENIZER_PARAMS))
-
-        # 2) Train it on every MIDI file found under `config.data`
-        midi_files = list(Path(config.data).glob("**/*.mid")) + \
-                     list(Path(config.data).glob("**/*.midi"))
-
-        # base vocab ≈ 400 → aim for 768 merges
-        tokenizer.train(vocab_size=768, files_paths=midi_files)
-
-
-        # 3) Save once so later runs can reuse it
-        tok_path = Path(config.system.work_dir) / "768MidiTokenizer.json"
+        # BEAT_RES = {
+        #     (0, 1): 8,
+        #     (1, 2): 8,
+        #     (1, 3): 3,
+        #     (2, 4): 4,
+        #     (2, 6): 3,
+        #     (4, 8): 2,
+        # }
+        #
+        # TOKENIZER_PARAMS = {
+        #     "pitch_range": (21, 108),  # exact 88-key range
+        #     "beat_res": BEAT_RES,
+        #     "num_velocities": 32,  # 4-point resolution
+        #     "special_tokens": ["PAD", "BOS", "EOS", "MASK"],
+        #     "use_chords": False,  # simpler for solo piano
+        #     "use_rests": True,
+        #     "use_tempos": True,
+        #     "use_time_signatures": True,
+        #     "use_programs": False,
+        #     "num_tempos": 32,
+        #     "tempo_range": (40, 220),  # wider just in case
+        # }
+        #
+        # tokenizer = REMI(TokenizerConfig(**TOKENIZER_PARAMS))
+        #
+        # # 2) Train it on every MIDI file found under `config.data`
+        # midi_files = list(Path(config.data).glob("**/*.mid")) + \
+        #              list(Path(config.data).glob("**/*.midi"))
+        #
+        # # base vocab ≈ 400 → aim for 768 merges
+        # tokenizer.train(vocab_size=768, files_paths=midi_files)
+        #
+        #
+        # # 3) Save once so later runs can reuse it
+        # tok_path = Path(config.system.work_dir) / "768MidiTokenizer.json"
+        # tok_path.parent.mkdir(parents=True, exist_ok=True)
+        # tokenizer.save(tok_path)
+        # print(f"✅  Tokenizer saved to {tok_path}")
+        #
+        # # 4) Store the path in the runtime config (helpful if you later `wandb` log) from tokenizers
+        # config.tokenizer_path = str(tok_path)
+        tokenizer_config = TokenizerConfig(num_velocities=16, use_chords=True, use_programs=True)
+        tokenizer = REMI(tokenizer_config)
+        tok_path = Path(config.system.work_dir) / "DEFAULTMidiTokenizer.json"
         tok_path.parent.mkdir(parents=True, exist_ok=True)
         tokenizer.save(tok_path)
         print(f"✅  Tokenizer saved to {tok_path}")
