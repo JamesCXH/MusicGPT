@@ -1,3 +1,5 @@
+import sys
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -148,12 +150,16 @@ class MultiHeadAttention(nn.Module):
         # DEBUG: verify that padding positions are really masked out
         if attn_mask is not None:  # attn_mask shape (B, 1, 1/Tx, T)
             # convert to a simple 0/1 vector: 1 = BLOCKED, 0 = ALLOWED
-            if attn_mask.dtype == torch.bool:
-                blocked = (~attn_mask)[0, 0, 0]  # invert: True = keep → blocked = ~
-            else:  # additive float mask (-∞ where we want to block)
-                blocked = (attn_mask[0, 0, 0] < 0)  # True where -∞
+            # if attn_mask.dtype == torch.bool:
+            #     blocked = (~attn_mask)[0, 0, 0]  # invert: True = keep → blocked = ~
+            # else:  # additive float mask (-∞ where we want to block)
+            blocked = attn_mask[0, 0, 0]  # True where -∞
+            tokens = x[0]
             print("DEBUG - blocked positions for sample-0:",
-                  blocked.int().tolist())  # e.g. [1, 1, 0, 0, 0, …]
+                  blocked)  # e.g. [1, 1, 0, 0, 0, …]
+            print("DEBUG - tokens:",
+                  tokens)  # e.g. [1, 1, 0, 0, 0, …]
+            sys.exit(1)
         # -------------------------------------------------------------
 
         ctx = F.scaled_dot_product_attention(
