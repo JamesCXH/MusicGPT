@@ -192,11 +192,8 @@ class GPT(nn.Module):
         else:
             combined_mask = causal_mask
 
-        if combined_mask.dtype == torch.bool:  # True = keep for SDPA :contentReference[oaicite:0]{index=0}
-            view = (~combined_mask[0, 0]).int()  # 1 = blocked, 0 = allowed
-        else:  # additive-mask path (-∞ where blocked)
-            view = (~torch.isfinite(combined_mask[0, 0])).int()
-        print("DEBUG - causal view (1 = blocked):\n", view.cpu().numpy())
+
+        print("DEBUG - INPUT IDs:\n", input_ids[0])
 
 
         for block in self.transformer.h:

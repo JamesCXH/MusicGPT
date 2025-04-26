@@ -154,11 +154,8 @@ class MultiHeadAttention(nn.Module):
             #     blocked = (~attn_mask)[0, 0, 0]  # invert: True = keep → blocked = ~
             # else:  # additive float mask (-∞ where we want to block)
             blocked = attn_mask[0, 0, 0]  # True where -∞
-            tokens = x[0]
             print("DEBUG - blocked positions for sample-0:",
                   blocked)  # e.g. [1, 1, 0, 0, 0, …]
-            print("DEBUG - tokens:",
-                  tokens)  # e.g. [1, 1, 0, 0, 0, …]
             sys.exit(1)
         # -------------------------------------------------------------
 
