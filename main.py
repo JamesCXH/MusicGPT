@@ -126,7 +126,7 @@ if __name__ == '__main__':
         # 2) Train it on every MIDI file found under `config.data`
         midi_files = list(Path(config.data).glob("**/*.mid")) + \
                      list(Path(config.data).glob("**/*.midi"))
-        tokenizer.train(vocab_size=30_000, files_paths=midi_files)
+        tokenizer.train(vocab_size=1024, files_paths=midi_files)
 
         # 3) Save once so later runs can reuse it
         tok_path = Path(config.system.work_dir) / "NEWMidiTokenizer.json"
