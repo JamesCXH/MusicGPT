@@ -129,7 +129,7 @@ if __name__ == '__main__':
         tokenizer.train(vocab_size=1024, files_paths=midi_files)
 
         # 3) Save once so later runs can reuse it
-        tok_path = Path(config.system.work_dir) / "NEWMidiTokenizer.json"
+        tok_path = Path(config.system.work_dir) / "1024MidiTokenizer.json"
         tok_path.parent.mkdir(parents=True, exist_ok=True)
         tokenizer.save(tok_path)
         print(f"✅  Tokenizer saved to {tok_path}")
