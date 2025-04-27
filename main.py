@@ -145,11 +145,11 @@ if __name__ == '__main__':
                      list(Path(config.data).glob("**/*.midi"))
 
         # base vocab ≈ 400 → aim for 768 merges
-        tokenizer.train(vocab_size=768, files_paths=midi_files)
+        tokenizer.train(vocab_size=512, files_paths=midi_files)
 
 
         # 3) Save once so later runs can reuse it
-        tok_path = Path(config.system.work_dir) / "768SmallerMidiTokenizer.json"
+        tok_path = Path(config.system.work_dir) / "512SmallerMidiTokenizer.json"
         tok_path.parent.mkdir(parents=True, exist_ok=True)
         tokenizer.save(tok_path)
         print(f"✅  Tokenizer saved to {tok_path}")
