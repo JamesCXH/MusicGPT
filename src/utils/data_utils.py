@@ -16,6 +16,8 @@ from miditok.pytorch_data import DatasetMIDI, DataCollator
 def split_data(tokenizer, files_paths, subset_name, max_seq_len, split, augment):
     subset_chunks_dir = Path("..", f"Midi_{subset_name}")
 
+    print(f"FILE PATHS {files_paths}")
+
     if split:
         # Split the MIDIs into chunks of sizes approximately about 1024 tokens
         split_files_for_training(files_paths=files_paths, 
