@@ -41,6 +41,7 @@ def get_data(tokenizer, datapath, max_seq_len=1024, batch_size=64, subsets=True,
 
     print("GETTING DATA!!!!")
     print("YEAH!!!!!")
+    print(midipaths)
 
     if not subsets:
         print("GETTING NOT SUBSETS!!!")
